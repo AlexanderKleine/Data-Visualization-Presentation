@@ -1,0 +1,406 @@
+---
+title: "The cow milk market in Europe"
+author: "Alexander Kleine"
+date: "11.12.2019"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+---
+
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr)
+library(rmdformats)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(echo= T,
+	             cache=F,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE)
+opts_knit$set(width=75)
+```
+  
+# Executive summary
+
+This project is investigating and visualizing cow milk market in Europe. The study covers different chances since 2010. The three main aspects are:
+
+- Price development of the consumer's drinking milk
+
+- Production of cow milk
+
+- Import of cow milk
+
+These 3 aspects are investigated regarding to their influences on each other. The main to examples will be Belgium and Italy. 
+
+
+
+# Data background
+
+The study works with data from **Eurostat**. Eurostat is the statistical office of the European Union which provides different statistics for Europe. The following data sets will be investigated:
+
+ - Price Index: **prc_fsc_idx**
+ 
+ - Production: **apro_mk_cola**
+ 
+ - Import: **apro_mk_pobta**
+
+With these names and the **eurostat** package you can download the data sets from Eurostat directly. Beside this package we will install further packages in order to obtain our investigation and visualization.
+
+```{r}
+library(eurostat)
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+
+```
+
+
+# Download and inspection of the data
+
+## Data frame: consumer price index 
+
+We are downloading with the help of the **get_eurostat** function and the concrete data set name the required data from Eurostat. Let us start with the **Food price monitoring tool [prc_fsc_idx]**.
+```{r}
+Price <- get_eurostat("prc_fsc_idx", type = "label")
+str(Price)
+```
+
+In order to filter the data frame, we have to understand the columns 
+ 
+ - unit
+ 
+ - indx
+ 
+ - coicop
+
+```{r}
+levels(Price$unit)
+```
+
+```{r}
+levels(Price$indx)
+```
+
+```{r}
+levels(Price$coicop)
+```
+
+First modification of the data set of the price index based on the relevant levels:
+ 
+ - Fresh whole milk
+ 
+ - Index, 2015=100
+ 
+ - Harmonised index of consumer prices
+```{r}
+ConsumerPriceMilk <- Price %>% 
+  select(region = geo, reference = coicop, time, unit, indextype = indx, values) %>%
+  filter(reference == "Fresh whole milk", unit == "Index, 2015=100", indextype == "Harmonised index of consumer prices", time > "2010-01-01" & time <"2019-01-01")
+```
+
+Check of the data consistency:
+```{r}
+sum(is.na(ConsumerPriceMilk))
+tail(ConsumerPriceMilk, 28)
+```
+
+
+The data frame seems to be only consistent in the case the following countries regarding to the research question:
+ 
+ - France
+ 
+ - Italy
+ 
+ - Belgium
+ 
+ - Denmark
+ 
+ - Slovenia
+
+```{r}
+ConsumerPriceMilk2010 <- ConsumerPriceMilk %>% filter(region %in% c("France", "Italy", "Belgium", "Denmark", "Slovenia"))
+```
+
+
+## Data frame: production 
+
+The data cleaning process repeats in a similar way in terms of the data frame for production of whole cow milk in Europe. 
+We are using the **Cows'milk collection and products obtained [apro_mk_cola]** from Eurostat. 
+```{r}
+Production <- get_eurostat("apro_mk_cola", type = "label")
+str(Production)
+```
+
+```{r}
+levels(Production$dairyprod)
+```
+
+```{r}
+levels(Production$unit)
+```
+
+```{r}
+ProductionConsumerMilk <- Production %>%
+  select(region = geo, reference = dairyprod, time, unit , values) %>%
+  filter(reference == "Drinking milk", time > "2009-01-01" & time <"2019-01-01") %>%
+  filter (region %in% c("France", "Italy", "Belgium", "Denmark", "Germany", "Slovenia"))
+```
+
+```{r message=FALSE, warning=FALSE, error=FALSE}
+sum(is.na(ProductionConsumerMilk))
+tail(ProductionConsumerMilk, 20)
+```
+
+
+## Data frame: import
+
+Last but not least we are creating a data frame about the import of whole milk by the **Milk collection (all milks) and dairy products obtained [apro_mk_pobta]** data set. This data set is quite similar to the privies one but it is overring information about the import of cow milk for the European Union.  
+```{r}
+Import <- get_eurostat("apro_mk_pobta", type = "label")
+str(Import)
+```
+
+```{r}
+levels(Import$dairyprod)
+```
+
+```{r}
+levels(Import$milkitem)
+```
+
+Due to the levels of the column $dairyprod we could investigate:
+ 
+ - Imports of whole milk (including raw milk)
+ 
+ - Imports (intra-EU) of whole milk (including raw milk)
+
+We should be able to even analyse the import of whole milk within the EU and whole milk coming from outside the EU. Unfortunately, at both levels the exact same values are reported which suggest that a distinction didn't happen. Therefore I used the general term  **Imports of whole milk (including raw milk)**.
+```{r}
+ImportMilk <- Import %>%
+  select(region = geo, reference = dairyprod, time, unit = milkitem , values) %>%
+  filter(reference == "Imports of whole milk (including raw milk)", unit == "Products obtained (1 000 t)", time > "2009-01-01" & time <"2019-01-01") %>%
+  filter (region %in% c("France", "Italy", "Belgium", "Denmark", "Germany", "Slovenia"))
+```
+
+```{r}
+sum(is.na(ImportMilk))
+tail(ImportMilk, 20)
+```
+
+
+# Visualizations
+
+## Price development
+
+With the first plot I would like to gain a first impression of the price development for consumer's cow milk since 2010.
+In this case I used a line-chart to visualise a time series. With the line-chart for the whole data set we can underline the selection of the following countries:
+ 
+ - France
+ 
+ - Italy
+ 
+ - Belgium
+ 
+ - Denmark
+ 
+ - Slovenia
+
+```{r}
+ggplot(data = ConsumerPriceMilk, aes(x = time, y = values))+
+  geom_line(aes(color = region))+
+  labs(x = "Year", y = "Price Index (2015 = 100)", title = "Price index whole milk (consumer prices)")+
+  theme(legend.position = "none")
+
+ggplot(data = ConsumerPriceMilk2010, aes(x = time, y = values))+
+  geom_line(aes(color = region))+
+  labs(x = "Year", y = "Price Index (2015 = 100)", title = "Price index whole milk (consumer prices) - selected countries")+
+  theme(legend.title = element_blank())
+```
+
+  
+### Manipulations to understand the Index
+
+Due to the labels in the data set, Eurostat is using a **harmonised index of consumer prices** which is using the bases **2015 = 100**. In the current plot the basis value **2015 = 100** is not clear visualised because the current data frame is reporting the price index for each month. 
+
+A price index is a normalized average of price relatives for a given good or service in a given region, during a given interval of time. It is statistically designed to help to compare how these price relatives, differ between time periods or geographical locations. Regarding our research question we should use a price index for whole years and not for each month. 
+```{r}
+ConsumerPriceMilkYearIndex <- ConsumerPriceMilk2010 %>% 
+  mutate (year = format(time, "%Y"))  %>% 
+  group_by(region, indextype, year) %>%
+  summarise(mean = mean(values))
+
+str(ConsumerPriceMilkYearIndex)
+```
+
+
+Please take in account: During the mutation the function is defining the values in the column **year** as a character. For the following plot we have to define **yeas as.numeric**. By adding points to the line-chart, the basis value **2015 = 100** will be clear visualised. 
+```{r}
+ggplot(data = ConsumerPriceMilkYearIndex, aes(x = as.numeric(year), y = mean, color = region))+
+  geom_line()+
+  geom_point()+
+  labs(x = "Year", y = "Price Index (2015 = 100)", title = "Price index whole milk (consumer prices) - selected countries")+
+  theme(legend.title = element_blank())
+```
+
+## Exploration of influences for the price development
+
+### Production of milk for the end consumer
+
+One of the aspects for the price development could be the lack of products on the market to answer the request of the customer. Therefore we will now visualise the production of milk for the end consumer within the scope of our research question.  
+```{r}
+ggplot(data = ProductionConsumerMilk, aes(x = time, y = values))+
+  geom_line(aes(color = region))+
+  labs(x = "Year", y = "Amound of milk (1,000 t)", title = "Production of milk for the end consumer")+
+  theme(legend.title = element_blank())
+```
+
+This plot makes clear that there is no influence by the amount of consumer milk production for each investigated country. The production seems to be quite stable since 2010.
+
+
+### Import of milk for the end consumer
+
+A second influence on price development could be price-relation of a market while importing the goods from other countries. The next plot is visualising the import of whole milk within the scope of our research question.
+```{r}
+ggplot(data = ImportMilk, aes(x = time, y = values))+
+  geom_line(aes(color = region))+
+  labs(x = "Year", y = "Amound of milk (1,000 t)", title = "Import of whole milk (including raw milk)")+
+  theme(legend.title = element_blank())
+
+
+ggplot(data = ConsumerPriceMilkYearIndex, aes(x = as.numeric(year), y = mean, color = region))+
+  geom_line()+
+  labs(x = "Year", y = "Price Index (2015 = 100)", title = "Price index whole milk (consumer prices) - selected countries")+
+  theme(legend.title = element_blank())
+```
+
+## Index of imported milk and the price index regarding to the example of Belgium
+
+In the next step an index plot will be used to visualise relative changes of the import of milk and the price development in the time series of Belgium. With this plot the influence of importing goods towards the price development can be evaluated even though the variables are measured in different units. 
+
+First we have to calculate the index for the import of milk in Belgium.
+```{r}
+ImportBelgium <- ImportMilk %>% 
+  filter(region == "Belgium")
+
+ImportBelgium$index <- (ImportBelgium$values / ImportBelgium$values[4] ) * 100
+
+ImportBelgium <- ImportBelgium %>% 
+  select(region, reference, time, index)  %>% 
+  mutate (time = format(time, "%Y"))
+
+PriceBelgium <- ConsumerPriceMilkYearIndex %>% 
+  select(region, reference = indextype, time = year, index = mean)  %>% 
+  filter(region == "Belgium")
+
+ImportPriceBelgium <- merge(x=ImportBelgium, y=PriceBelgium,all=TRUE)
+```
+
+
+```{r}
+ggplot(data = ImportPriceBelgium, aes(x = as.numeric(time), y = index, color = reference))+
+  geom_line()+
+  labs(x = "Year", y = "Index (2015 = 100)", title = "Index Whole Milk (Comparing Import and Price)")+
+  theme(legend.title = element_blank())
+```
+
+
+## Amount of imported cow milk in the EU
+
+However, Belgium is the only country where an influence of importing cow milk and the development of the consumer price could be explored. If we look at Italy, for example, we get a completely different impression.
+```{r}
+ImportItaly <- ImportMilk %>% 
+  filter(region == "Italy")
+
+ImportItaly$index <- (ImportItaly$values / ImportItaly$values[4] ) * 100
+
+ImportItaly <- ImportItaly %>% 
+  select(region, reference, time, index)  %>% 
+  mutate (time = format(time, "%Y"))
+
+PriceItaly <- ConsumerPriceMilkYearIndex %>% 
+  select(region, reference = indextype, time = year, index = mean)  %>% 
+  filter(region == "Italy")
+
+ImportPriceItaly <- merge(x=ImportItaly, y=PriceItaly, all=TRUE)
+```
+
+
+```{r}
+ggplot(data = ImportPriceItaly, aes(x = as.numeric(time), y = index, color = reference))+
+  geom_line()+
+  labs(x = "Year", y = "Index (2015 = 100)", title = "Index Whole Milk (Comparing Import and Price)")+
+  theme(legend.title = element_blank())
+```
+
+If you remeber the absolute figures for imports, the relative change of 120% is based on an absolute value of around 1,500,000 t in the case of Italy. In relation to our 5 example countries, this value is the highest at a large distance. 
+In the next step I would like to investigate whether this value in the comparison of the whole data set will create the same impression.  
+
+Let us compair the EU in 2011 via a geospatial visualization.
+```{r}
+ImportMilk2011 <- Import %>%
+  select(region = geo, reference = dairyprod, time, unit = milkitem , values) %>%
+  filter(reference == "Imports of whole milk (including raw milk)", unit == "Products obtained (1 000 t)", time == "2011-01-01") %>%
+  drop_na()
+ 
+```
+
+```{r}
+world <- ggplot2::map_data(map = "world")
+
+ImportMilk2011.map <- world %>% inner_join(ImportMilk2011, by = c("region"))
+
+ggplot(data = ImportMilk2011.map, aes(x = long, y = lat)) +
+geom_polygon(aes(group = group, fill = values)) +
+coord_map()+ 
+  theme_void()+
+  labs(title = "Import of whole milk (including raw milk)")
+  
+```
+
+
+## Obtained milk product in Italy
+
+As we can see Italy imports way more cow milk in 2011 compared to all reported European countries. Even though the consumer price for Italy stayed quite stable. But how was Italy using the high amount of milk in 2011? 
+
+The following bar chart is visualising the each obtained product by raw or whole cow milk in Italy in the year of 2011:
+```{r}
+MilkUseItaly <- Production %>%
+  select(region = geo, reference = dairyprod, time, unit , values) %>%
+  mutate(reference = ifelse(substr(reference, 1,3)=="But", "Butter", as.character(reference))) %>%
+  mutate(reference = ifelse(substr(reference, 1,3)=="Cre", "Cream", as.character(reference))) %>%
+  mutate(reference = ifelse(substr(reference, 1,3)=="Aci", "Yoghurts", as.character(reference))) %>%
+  mutate(reference = ifelse(substr(reference, 1,3)=="Che", "Cheese", as.character(reference))) %>%
+  filter(time == "2011-01-01", region == "Italy") %>%
+  filter (reference %in% c("Drinking milk", "Cream", "Yoghurts)", "Butter", "Cheese"))
+
+```
+
+
+```{r}
+  ggplot(data = MilkUseItaly, aes(x =reorder(reference, -values), y = values)) +
+  geom_bar(stat = "identity")+
+  labs(x = "Usage", y = "Amount of milk (1,000t)", title = "Obtained product by raw or whole cow milk")+ 
+  scale_x_discrete()
+
+```
+
+Compared to the amount of own produced cow milk around 2,500,000 t of milk for the end consumer from the previse line chart, the 1,500,000 t of imported milk seams to get mainly used for the other 3 obtained product:
+ 
+ - Cheese
+ 
+ - Cream
+ 
+ - Butter
+
+
+This finding could explain why, in the case of Italy, the import of cow milk had no influence on the price development on end consumer’s drinking milk. My study design could be now used for further investigation regarding to the price development of the other products.
+
+
+
+
+
+
+
